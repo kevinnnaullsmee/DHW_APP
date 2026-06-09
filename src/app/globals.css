@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+@theme {
+  --color-neon-green: #FF1E27; /* Rediseñado a Rojo para compatibilidad */
+  --color-neon-purple: #D4D4D8; /* Rediseñado a Cromo para compatibilidad */
+  --color-graffiti-red: #FF1E27;
+  --color-graffiti-chrome: #D4D4D8;
+  --color-dark-bg: #000000;
+  --color-dark-surface: #0A0A0A;
+  --color-dark-border: #1C1C1E;
+}
+
+@layer base {
+  :root {
+    --background: #000000;
+    --foreground: #ffffff;
+  }
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-dark-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-dark-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-graffiti-red);
+}
+
+/* Red & Chrome specific utility classes */
+@layer utilities {
+  .glass-panel {
+    @apply bg-black/80 backdrop-blur-md border border-white/10 shadow-[0_0_15px_rgba(255,30,39,0.15)];
+  }
+  
+  .text-glow {
+    text-shadow: 0 0 10px rgba(255, 30, 39, 0.8);
+  }
+  
+  .text-glow-purple {
+    text-shadow: 0 0 10px rgba(212, 212, 216, 0.6);
+  }
+  
+  .chrome-gradient {
+    background: linear-gradient(135deg, #ffffff 0%, #a1a1aa 50%, #e4e4e7 100%);
+  }
+
+  .chrome-text {
+    background: linear-gradient(135deg, #ffffff 0%, #a1a1aa 50%, #e4e4e7 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+/* Sobrescribir popups de Maplibre para evitar scrollbars feos */
+.maplibregl-popup-content {
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+}
+
+.maplibregl-popup-close-button {
+  display: none !important;
+}
+
+.maplibregl-popup-tip {
+  border-top-color: var(--color-dark-surface) !important;
+  border-bottom-color: var(--color-dark-surface) !important;
+  border-left-color: var(--color-dark-surface) !important;
+  border-right-color: var(--color-dark-surface) !important;
+}
+
+/* Ocultar el logo de Maplibre y la atribución (identificado como el botón del desarrollador) */
+.maplibregl-ctrl-logo,
+.maplibregl-ctrl-attrib,
+.maplibregl-ctrl-bottom-left,
+.maplibregl-ctrl-bottom-right {
+  display: none !important;
+}
+

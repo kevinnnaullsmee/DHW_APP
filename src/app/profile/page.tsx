@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { fetchLatestVersionImages, resolveSpotImage } from '@/lib/spots';
 import { User } from '@supabase/supabase-js';
 import CustomAlert from '@/components/CustomAlert';
 
@@ -71,8 +72,7 @@ export default function ProfilePage() {
     setAlertConfig({ isOpen: true, type, title, message });
   };
 
-  useEffect(() => {
-    const loadProfileAndSpots = async () => {
+  const loadProfileAndSpots = async () => {
       try {
         if (!isSupabaseConfigured) {
           setMySpots(USER_DATA.recentSpots);
@@ -154,9 +154,12 @@ export default function ProfilePage() {
           .order('created_at', { ascending: false });
 
         if (spotsData && spotsData.length > 0) {
+          const spotIds = spotsData.map((s: DBSpot) => s.id);
+          const latestImages = await fetchLatestVersionImages(spotIds);
+
           const mappedSpots = (spotsData as DBSpot[]).map((spot: DBSpot) => ({
             id: spot.id,
-            image: spot.image_url,
+            image: resolveSpotImage(spot.image_url, latestImages[spot.id]),
             type: spot.type.charAt(0).toUpperCase() + spot.type.slice(1),
             number: spotNumbersMap[spot.id] || 1
           }));
@@ -170,10 +173,21 @@ export default function ProfilePage() {
       } finally {
         setLoading(false);
       }
-    };
+  };
 
+  useEffect(() => {
     loadProfileAndSpots();
   }, [router]);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadProfileAndSpots();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
 
   const handleSave = async () => {
     if (!user) return;

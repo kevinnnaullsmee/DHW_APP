@@ -4,15 +4,12 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { X, Edit3, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-
-interface SpotVersion {
-  id: string;
-  spot_id: string;
-  date_updated: string;
-  image_url: string;
-  description?: string;
-  created_at: string;
-}
+import {
+  createFeedPost,
+  deleteSpotCascade,
+  getVersionImage,
+  type SpotVersionRow,
+} from '@/lib/spots';
 
 interface Spot {
   id: string;
@@ -36,18 +33,18 @@ interface SpotPopupProps {
 }
 
 export default function SpotPopup({ spot, onClose, currentUserId, onUpdated }: SpotPopupProps) {
-  const [versions, setVersions] = useState<SpotVersion[]>([]);
-  const [selectedVersion, setSelectedVersion] = useState<SpotVersion | null>(null);
+  const [versions, setVersions] = useState<SpotVersionRow[]>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
   const [showUpdateForm, setShowUpdateForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [graffitisCount, setGraffitisCount] = useState<number>(0);
+  const [imageError, setImageError] = useState(false);
 
   const fetchVersions = async () => {
     try {
       if (!supabase) return;
 
-      // Obtener versiones del spot
       const { data: versionData, error: versionError } = await supabase
         .from('spot_versions')
         .select('*')
@@ -60,12 +57,12 @@ export default function SpotPopup({ spot, onClose, currentUserId, onUpdated }: S
           id: spot.id,
           spot_id: spot.id,
           date_updated: spot.created_at || new Date().toISOString(),
-          image_url: spot.image,
+          image_url: spot.image || null,
           description: spot.description,
-          created_at: spot.created_at || new Date().toISOString()
+          created_at: spot.created_at || new Date().toISOString(),
         }]);
       } else if (versionData && versionData.length > 0) {
-        const hasOriginal = versionData.some(v => v.id === spot.id);
+        const hasOriginal = versionData.some((v) => v.id === spot.id);
         if (!hasOriginal && spot.image) {
           versionData.unshift({
             id: spot.id,
@@ -73,22 +70,23 @@ export default function SpotPopup({ spot, onClose, currentUserId, onUpdated }: S
             date_updated: spot.created_at || new Date().toISOString(),
             image_url: spot.image,
             description: spot.description,
-            created_at: spot.created_at || new Date().toISOString()
+            created_at: spot.created_at || new Date().toISOString(),
           });
         }
         setVersions(versionData);
+        setSelectedVersionId(versionData[versionData.length - 1].id);
       } else {
         setVersions([{
           id: spot.id,
           spot_id: spot.id,
           date_updated: spot.created_at || new Date().toISOString(),
-          image_url: spot.image,
+          image_url: spot.image || null,
           description: spot.description,
-          created_at: spot.created_at || new Date().toISOString()
+          created_at: spot.created_at || new Date().toISOString(),
         }]);
+        setSelectedVersionId(spot.id);
       }
 
-      // Contar graffitis del artista
       const { data: artistSpots, error: countError } = await supabase
         .from('spots')
         .select('id')
@@ -96,14 +94,15 @@ export default function SpotPopup({ spot, onClose, currentUserId, onUpdated }: S
         .order('created_at', { ascending: true });
 
       if (!countError && artistSpots) {
-        const spotIndex = artistSpots.findIndex(s => s.id === spot.id);
+        const spotIndex = artistSpots.findIndex((s) => s.id === spot.id);
         setGraffitisCount(spotIndex + 1);
       }
 
-      // Verificar si el usuario actual es el dueño
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && spot.user_id === user.id) {
+      if (currentUserId && spot.user_id === currentUserId) {
         setIsOwner(true);
+      } else {
+        const { data: { user } } = await supabase.auth.getUser();
+        setIsOwner(!!(user && spot.user_id === user.id));
       }
     } catch (err) {
       console.error('Error al cargar versiones:', err);
@@ -113,54 +112,71 @@ export default function SpotPopup({ spot, onClose, currentUserId, onUpdated }: S
   };
 
   useEffect(() => {
+    setImageError(false);
     fetchVersions();
-  }, [spot]);
+  }, [spot.id]);
 
-  const displayVersion = selectedVersion || (versions.length > 0 ? versions[versions.length - 1] : null);
+  const displayVersion =
+    versions.find((v) => v.id === selectedVersionId) ||
+    versions[versions.length - 1] ||
+    null;
+
+  const displayImage = displayVersion
+    ? getVersionImage(displayVersion, versions, spot.image)
+    : null;
 
   const handleDelete = async () => {
     if (!window.confirm('¿Estás seguro de que deseas eliminar este spot?')) return;
-    
+
     try {
-      const { error } = await supabase.from('spots').delete().eq('id', spot.id);
+      const error = await deleteSpotCascade(spot.id);
       if (error) throw error;
       alert('Spot eliminado correctamente');
       onClose();
       onUpdated?.();
     } catch (err) {
       console.error('Error al eliminar:', err);
-      alert('Error al eliminar el spot');
+      alert('Error al eliminar el spot. Verifica los permisos en Supabase.');
     }
   };
 
   return (
     <div className="bg-black border border-white/10 rounded-xl shadow-[0_0_20px_rgba(255,30,39,0.3)] w-full max-w-sm text-white overflow-hidden flex flex-col max-h-[85vh]">
-      {/* Header */}
       <div className="p-3.5 border-b border-white/10 bg-black/50 flex-shrink-0">
         <div className="flex justify-between items-start gap-3 mb-3">
-          <div>
+          <div className="flex-1 min-w-0">
             <h3 className="font-extrabold text-white text-sm line-clamp-1">{spot.title}</h3>
             <p className="text-[9px] text-white mt-1">
               {spot.author} <span className="text-white font-bold">#{graffitisCount}</span>
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors flex-shrink-0"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {isOwner && (
+              <button
+                onClick={handleDelete}
+                className="p-1.5 rounded-md bg-red-900/40 text-red-400 hover:bg-red-900 hover:text-white transition-colors"
+                title="Eliminar spot"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
-        {/* Selector de fechas */}
         {versions.length > 1 && (
           <div className="flex items-center gap-2">
             <label className="text-[8px] text-gray-400 font-mono uppercase whitespace-nowrap font-bold">Fechas:</label>
             <select
-              value={selectedVersion?.id || versions[versions.length - 1].id}
+              value={selectedVersionId || versions[versions.length - 1]?.id}
               onChange={(e) => {
-                const version = versions.find(v => v.id === e.target.value);
-                setSelectedVersion(version || null);
+                setSelectedVersionId(e.target.value);
+                setImageError(false);
               }}
               className="flex-1 bg-black/60 border border-white/10 rounded px-2 py-1.5 text-[8px] text-white focus:outline-none focus:border-[var(--color-graffiti-red)] transition-colors"
             >
@@ -169,7 +185,7 @@ export default function SpotPopup({ spot, onClose, currentUserId, onUpdated }: S
                   {new Date(version.date_updated).toLocaleDateString('es-ES', {
                     year: '2-digit',
                     month: 'short',
-                    day: 'numeric'
+                    day: 'numeric',
                   })} v{idx + 1}
                 </option>
               ))}
@@ -178,77 +194,66 @@ export default function SpotPopup({ spot, onClose, currentUserId, onUpdated }: S
         )}
       </div>
 
-      {/* Contenido */}
       <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
-        {/* Imagen */}
-        {displayVersion && (displayVersion.image_url || spot.image) && (
-          <div className="relative w-full h-36 rounded-lg overflow-hidden border border-white/5 flex-shrink-0">
+        <div className="relative w-full h-36 rounded-lg overflow-hidden border border-white/5 flex-shrink-0 bg-zinc-900">
+          {displayImage && !imageError ? (
             <Image
-              src={displayVersion.image_url || spot.image}
+              key={`${displayVersion?.id}-${displayImage}`}
+              src={displayImage}
               alt={spot.title}
               fill
               className="object-cover"
               priority
-              onError={(e) => {
-                console.warn('Error cargando imagen:', displayVersion.image_url || spot.image);
-              }}
+              unoptimized
+              onError={() => setImageError(true)}
             />
-            <div className="absolute top-2 right-2 z-10 bg-black/80 backdrop-blur-sm border border-white/10 text-[10px] font-mono font-bold px-2 py-1 rounded text-white">
-              #{spot.number}
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500 font-mono">
+              Sin foto en esta fecha
             </div>
+          )}
+          <div className="absolute top-2 right-2 z-10 bg-black/80 backdrop-blur-sm border border-white/10 text-[10px] font-mono font-bold px-2 py-1 rounded text-white">
+            #{spot.number}
           </div>
-        )}
+        </div>
 
-        {/* Metadata */}
         <div className="space-y-2">
           <span className="text-[9px] font-mono font-bold bg-white/10 text-white px-2.5 py-1 rounded uppercase inline-block">
             {spot.type}
           </span>
         </div>
 
-        {/* Descripción */}
         {displayVersion?.description && (
           <p className="text-[10px] text-white italic border-t border-white/10 pt-2.5 break-words">
-            "{displayVersion.description}"
+            &quot;{displayVersion.description}&quot;
           </p>
         )}
 
-        {/* Fecha */}
         {displayVersion && (
           <p className="text-[8px] text-gray-400 border-t border-white/10 pt-2.5">
             {new Date(displayVersion.date_updated).toLocaleDateString('es-ES', {
               year: 'numeric',
               month: 'long',
-              day: 'numeric'
+              day: 'numeric',
             })}
           </p>
         )}
       </div>
 
-      {/* Footer */}
       <div className="p-3.5 border-t border-white/10 bg-black/50 flex-shrink-0 space-y-2">
         {isOwner && (
           <>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowUpdateForm(!showUpdateForm)}
-                className="flex-1 bg-[var(--color-graffiti-red)] text-white text-[11px] font-bold py-2.5 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
-              >
-                <Edit3 size={14} />
-                ACTUALIZAR
-              </button>
-              <button
-                onClick={handleDelete}
-                className="flex-1 bg-red-900/50 text-white text-[11px] font-bold py-2.5 rounded-lg hover:bg-red-900 transition-colors flex items-center justify-center gap-2"
-              >
-                <Trash2 size={14} />
-                BORRAR
-              </button>
-            </div>
-            
+            <button
+              onClick={() => setShowUpdateForm(!showUpdateForm)}
+              className="w-full bg-[var(--color-graffiti-red)] text-white text-[11px] font-bold py-2.5 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <Edit3 size={14} />
+              ACTUALIZAR
+            </button>
+
             {showUpdateForm && (
               <UpdateSpotForm
-                spotId={spot.id}
+                spot={spot}
                 onUpdated={() => {
                   setShowUpdateForm(false);
                   fetchVersions();
@@ -263,7 +268,13 @@ export default function SpotPopup({ spot, onClose, currentUserId, onUpdated }: S
   );
 }
 
-function UpdateSpotForm({ spotId, onUpdated }: { spotId: string; onUpdated: () => void }) {
+function UpdateSpotForm({
+  spot,
+  onUpdated,
+}: {
+  spot: Spot;
+  onUpdated: () => void;
+}) {
   const [description, setDescription] = useState('');
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
@@ -273,7 +284,6 @@ function UpdateSpotForm({ spotId, onUpdated }: { spotId: string; onUpdated: () =
     const file = e.target.files?.[0];
     if (file) {
       setImage(file);
-      // Crear preview de imagen
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
@@ -284,55 +294,74 @@ function UpdateSpotForm({ spotId, onUpdated }: { spotId: string; onUpdated: () =
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!description.trim() && !image) {
+      alert('Agrega una descripción o una foto para actualizar el spot.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      let imageUrl = '';
+      let imageUrl: string | null = null;
 
-      // Subir imagen solo si existe (opcional)
       if (image) {
-        try {
-          const timestamp = Date.now();
-          const filename = `${timestamp}-${image.name.replace(/\s+/g, '_')}`;
-          const filePath = `spot_updates/${spotId}/${filename}`;
+        const timestamp = Date.now();
+        const filename = `${timestamp}-${image.name.replace(/\s+/g, '_')}`;
+        const filePath = `spot_updates/${spot.id}/${filename}`;
 
-          const { error: uploadError } = await supabase.storage
-            .from('spots')
-            .upload(filePath, image, {
-              cacheControl: '3600',
-              upsert: false
-            });
+        const { error: uploadError } = await supabase.storage
+          .from('spots')
+          .upload(filePath, image, {
+            cacheControl: '3600',
+            upsert: false,
+          });
 
-          if (uploadError) {
-            console.warn('Advertencia al subir imagen:', uploadError.message);
-            // No frenamos si falla la imagen, continuamos sin ella
-          } else {
-            const { data: publicUrl } = supabase.storage
-              .from('spots')
-              .getPublicUrl(filePath);
-            imageUrl = publicUrl.publicUrl;
-          }
-        } catch (imgErr) {
-          console.warn('Error al procesar imagen:', imgErr);
-          // Continuamos sin imagen
+        if (uploadError) {
+          throw new Error('No se pudo subir la imagen: ' + uploadError.message);
         }
+
+        const { data: publicUrl } = supabase.storage
+          .from('spots')
+          .getPublicUrl(filePath);
+        imageUrl = publicUrl.publicUrl;
       }
 
-      // Guardar versión en base de datos
-      const { error } = await supabase
+      const { data: newVersion, error } = await supabase
         .from('spot_versions')
         .insert([
           {
-            spot_id: spotId,
+            spot_id: spot.id,
             date_updated: new Date().toISOString(),
-            description: description || null,
-            image_url: imageUrl || null,
-          }
-        ]);
+            description: description.trim() || null,
+            image_url: imageUrl,
+          },
+        ])
+        .select()
+        .single();
 
-      if (error) {
-        console.error('Error RLS:', error);
-        throw error;
+      if (error) throw error;
+
+      const spotUpdate: Record<string, string | null> = {};
+      if (description.trim()) spotUpdate.description = description.trim();
+      if (imageUrl) spotUpdate.image_url = imageUrl;
+
+      if (Object.keys(spotUpdate).length > 0) {
+        await supabase.from('spots').update(spotUpdate).eq('id', spot.id);
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && newVersion) {
+        await createFeedPost({
+          spotId: spot.id,
+          versionId: newVersion.id,
+          author: spot.author,
+          title: spot.title,
+          description: description.trim() || null,
+          imageUrl,
+          latitude: spot.lat,
+          longitude: spot.lng,
+          userId: user.id,
+        });
       }
 
       alert('¡Spot actualizado con éxito!');
@@ -342,7 +371,8 @@ function UpdateSpotForm({ spotId, onUpdated }: { spotId: string; onUpdated: () =
       onUpdated();
     } catch (err) {
       console.error('Error al actualizar:', err);
-      alert('Error al actualizar el spot. Verifica los permisos en Supabase.');
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      alert('Error al actualizar el spot: ' + msg);
     } finally {
       setLoading(false);
     }
@@ -350,7 +380,6 @@ function UpdateSpotForm({ spotId, onUpdated }: { spotId: string; onUpdated: () =
 
   return (
     <form onSubmit={handleSubmit} className="p-2.5 bg-white/5 rounded-lg border border-white/10 space-y-2.5">
-      {/* Preview de imagen */}
       {imagePreview && (
         <div className="relative w-full h-24 rounded-lg overflow-hidden border border-white/10">
           <Image
@@ -358,6 +387,7 @@ function UpdateSpotForm({ spotId, onUpdated }: { spotId: string; onUpdated: () =
             alt="Preview"
             fill
             className="object-cover"
+            unoptimized
           />
           <button
             type="button"
@@ -372,7 +402,6 @@ function UpdateSpotForm({ spotId, onUpdated }: { spotId: string; onUpdated: () =
         </div>
       )}
 
-      {/* Input de imagen */}
       <div>
         <label className="text-[9px] text-gray-400 font-mono mb-1 block uppercase">Foto actual</label>
         <input
@@ -383,7 +412,6 @@ function UpdateSpotForm({ spotId, onUpdated }: { spotId: string; onUpdated: () =
         />
       </div>
 
-      {/* Descripción */}
       <textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
@@ -393,10 +421,9 @@ function UpdateSpotForm({ spotId, onUpdated }: { spotId: string; onUpdated: () =
         maxLength={200}
       />
 
-      {/* Botón submit */}
       <button
         type="submit"
-        disabled={loading || !description.trim()}
+        disabled={loading || (!description.trim() && !image)}
         className="w-full bg-[var(--color-graffiti-red)] text-white text-[10px] font-bold py-2 rounded hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
       >
         {loading ? (

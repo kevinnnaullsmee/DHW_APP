@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Camera, MapPin, X } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { createFeedPost } from '@/lib/spots';
 import { User } from '@supabase/supabase-js';
 import CustomAlert from '@/components/CustomAlert';
 
@@ -184,19 +185,53 @@ export default function RegisterPage() {
         .from('spots')
         .getPublicUrl(filePath);
 
-      // 3. Registrar los datos del spot en la base de datos
-      const { error: insertError } = await supabase.from('spots').insert({
-        title: data.spotName || 'Spot sin título',
-        type: data.type || 'tag',
-        author: profile?.alias || data.author || 'Miembro DHW',
-        latitude: location.lat,
-        longitude: location.lng,
-        image_url: publicUrl,
-        description: data.description || '',
-        user_id: user.id
-      });
+      const { data: newSpot, error: insertError } = await supabase
+        .from('spots')
+        .insert({
+          title: data.spotName || 'Spot sin título',
+          type: data.type || 'tag',
+          author: profile?.alias || data.author || 'Miembro DHW',
+          latitude: location.lat,
+          longitude: location.lng,
+          image_url: publicUrl,
+          description: data.description || '',
+          user_id: user.id,
+        })
+        .select()
+        .single();
 
       if (insertError) throw insertError;
+
+      const { data: newVersion, error: versionError } = await supabase
+        .from('spot_versions')
+        .insert([
+          {
+            spot_id: newSpot.id,
+            date_updated: new Date().toISOString(),
+            image_url: publicUrl,
+            description: data.description || null,
+          },
+        ])
+        .select()
+        .single();
+
+      if (versionError) {
+        console.warn('No se pudo crear versión inicial:', versionError.message);
+      }
+
+      if (newVersion) {
+        await createFeedPost({
+          spotId: newSpot.id,
+          versionId: newVersion.id,
+          author: newSpot.author,
+          title: newSpot.title,
+          description: newSpot.description,
+          imageUrl: publicUrl,
+          latitude: newSpot.latitude,
+          longitude: newSpot.longitude,
+          userId: user.id,
+        });
+      }
 
       showAlert('success', 'Registro Completado', '¡Pinta registrada exitosamente!', () => {
         router.push('/');

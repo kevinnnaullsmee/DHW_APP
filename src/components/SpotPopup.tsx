@@ -32,6 +32,17 @@ interface SpotPopupProps {
   onUpdated?: () => void;
 }
 
+const CATEGORIES = [
+  { id: 'bomba', label: '💣 Bomba', icon: '💣' },
+  { id: 'quick', label: '⚡ Quick', icon: '⚡' },
+  { id: 'pieza', label: '🎨 Pieza', icon: '🎨' },
+  { id: 'produccion', label: '🏭 Producción', icon: '🏭' },
+  { id: 'tag', label: '✍️ Tag', icon: '✍️' },
+  { id: 'throwup', label: '🌀 Throwup', icon: '🌀' },
+  { id: 'sticker', label: '📌 Sticker', icon: '📌' },
+  { id: 'wildstyle', label: '🌊 Wildstyle', icon: '🌊' },
+];
+
 export default function SpotPopup({ spot, onClose, currentUserId, onUpdated }: SpotPopupProps) {
   const [versions, setVersions] = useState<SpotVersionRow[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
@@ -51,40 +62,13 @@ export default function SpotPopup({ spot, onClose, currentUserId, onUpdated }: S
         .eq('spot_id', spot.id)
         .order('created_at', { ascending: true });
 
-      if (versionError) {
-        console.warn('No hay versiones anteriores:', versionError.message);
-        setVersions([{
-          id: spot.id,
-          spot_id: spot.id,
-          date_updated: spot.created_at || new Date().toISOString(),
-          image_url: spot.image || null,
-          description: spot.description,
-          created_at: spot.created_at || new Date().toISOString(),
-        }]);
-      } else if (versionData && versionData.length > 0) {
-        const hasOriginal = versionData.some((v) => v.id === spot.id);
-        if (!hasOriginal && spot.image) {
-          versionData.unshift({
-            id: spot.id,
-            spot_id: spot.id,
-            date_updated: spot.created_at || new Date().toISOString(),
-            image_url: spot.image,
-            description: spot.description,
-            created_at: spot.created_at || new Date().toISOString(),
-          });
-        }
-        setVersions(versionData);
-        setSelectedVersionId(versionData[versionData.length - 1].id);
+      if (versionError || !versionData || versionData.length === 0) {
+        console.warn('No hay versiones:', versionError?.message);
+        setVersions([]);
+        setSelectedVersionId(null);
       } else {
-        setVersions([{
-          id: spot.id,
-          spot_id: spot.id,
-          date_updated: spot.created_at || new Date().toISOString(),
-          image_url: spot.image || null,
-          description: spot.description,
-          created_at: spot.created_at || new Date().toISOString(),
-        }]);
-        setSelectedVersionId(spot.id);
+        setVersions(versionData);
+        setSelectedVersionId(versionData[0].id);
       }
 
       const { data: artistSpots, error: countError } = await supabase
@@ -279,6 +263,7 @@ function UpdateSpotForm({
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('bomba');
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -334,6 +319,8 @@ function UpdateSpotForm({
             date_updated: new Date().toISOString(),
             description: description.trim() || null,
             image_url: imageUrl,
+            category: selectedCategory,
+            version_number: null,
           },
         ])
         .select()
@@ -357,10 +344,11 @@ function UpdateSpotForm({
           author: spot.author,
           title: spot.title,
           description: description.trim() || null,
-          imageUrl,
+          imageUrl: imageUrl || null,
           latitude: spot.lat,
           longitude: spot.lng,
           userId: user.id,
+          category: selectedCategory,
         });
       }
 
@@ -401,6 +389,28 @@ function UpdateSpotForm({
           </button>
         </div>
       )}
+
+      <div>
+        <label className="text-[9px] text-gray-400 font-mono mb-1 block uppercase">📁 Categoría</label>
+        <div className="grid grid-cols-4 gap-1.5">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => setSelectedCategory(cat.id)}
+              className={`p-2 rounded text-[8px] font-bold transition-all flex flex-col items-center gap-1 ${
+                selectedCategory === cat.id
+                  ? 'bg-[var(--color-graffiti-red)] text-white border-2 border-white'
+                  : 'bg-white/10 text-gray-300 border-2 border-white/20 hover:border-white/40'
+              }`}
+              title={cat.label}
+            >
+              <span className="text-lg">{cat.icon}</span>
+              <span className="line-clamp-1">{cat.label.split(' ')[1]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div>
         <label className="text-[9px] text-gray-400 font-mono mb-1 block uppercase">Foto actual</label>

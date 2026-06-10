@@ -210,6 +210,8 @@ export default function RegisterPage() {
             date_updated: new Date().toISOString(),
             image_url: publicUrl,
             description: data.description || null,
+            category: data.type || 'actualización',
+            version_number: 1,
           },
         ])
         .select()

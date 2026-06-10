@@ -1,0 +1,11 @@
+{
+  "name": "DHW - Spot Tracker",
+  "short_name": "DHW",
+  "description": "Progressive Web App para rastrear y compartir spots de graffiti",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#ff1e27",
+  "background_color": "#000000"
+}

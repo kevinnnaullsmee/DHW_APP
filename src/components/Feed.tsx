@@ -20,6 +20,7 @@ interface Post {
   user_id: string;
   likes: number;
   comments_count: number;
+  category?: string;
 }
 
 interface Comment {
@@ -50,6 +51,7 @@ export default function Feed({ currentUserId }: { currentUserId?: string }) {
   const [commentingPostId, setCommentingPostId] = useState<string | null>(null);
   const [commentTexts, setCommentTexts] = useState<Record<string, string>>({});
   const [comments, setComments] = useState<Record<string, Comment[]>>({});
+  const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [alertConfig, setAlertConfig] = useState({
     isOpen: false,
     type: 'info' as 'success' | 'error' | 'info',
@@ -155,6 +157,38 @@ export default function Feed({ currentUserId }: { currentUserId?: string }) {
     }
   };
 
+  const handleLike = async (post: Post) => {
+    try {
+      const isLiked = likedPosts.has(post.id);
+      const newLikes = isLiked ? post.likes - 1 : post.likes + 1;
+
+      const { error } = await supabase
+        .from('posts')
+        .update({ likes: newLikes })
+        .eq('id', post.id);
+
+      if (error) throw error;
+
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === post.id ? { ...p, likes: newLikes } : p
+        )
+      );
+
+      if (isLiked) {
+        setLikedPosts((prev) => {
+          const next = new Set(prev);
+          next.delete(post.id);
+          return next;
+        });
+      } else {
+        setLikedPosts((prev) => new Set(prev).add(post.id));
+      }
+    } catch (err) {
+      console.error('Error updating like:', err);
+    }
+  };
+
   const shareLocation = (post: Post) => {
     const mapsUrl = `https://www.google.com/maps?q=${post.latitude},${post.longitude}`;
     const appUrl = `${window.location.origin}/?spot=${post.spot_id}`;
@@ -211,7 +245,7 @@ export default function Feed({ currentUserId }: { currentUserId?: string }) {
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="text-[10px] font-mono font-bold bg-white/5 border border-white/10 text-[var(--color-graffiti-red)] px-2.5 py-1 rounded">
-                    #{posts.length - index} • ACTUALIZACIÓN
+                    #{posts.length - index} • {(post.category || 'ACTUALIZACIÓN').toUpperCase()}
                   </div>
                   {currentUserId === post.user_id && (
                     <button
@@ -235,6 +269,7 @@ export default function Feed({ currentUserId }: { currentUserId?: string }) {
                     src={post.image_url}
                     alt={post.title}
                     fill
+                    sizes="100vw"
                     className="object-cover"
                     unoptimized
                   />
@@ -243,8 +278,15 @@ export default function Feed({ currentUserId }: { currentUserId?: string }) {
 
               <div className="p-4">
                 <div className="flex items-center gap-4 mb-3">
-                  <button className="flex items-center gap-1.5 text-gray-400 hover:text-[var(--color-graffiti-red)] transition-colors text-sm">
-                    <Heart size={18} />
+                  <button 
+                    onClick={() => handleLike(post)}
+                    className={`flex items-center gap-1.5 transition-colors text-sm ${
+                      likedPosts.has(post.id)
+                        ? 'text-[var(--color-graffiti-red)]'
+                        : 'text-gray-400 hover:text-[var(--color-graffiti-red)]'
+                    }`}
+                  >
+                    <Heart size={18} fill={likedPosts.has(post.id) ? 'currentColor' : 'none'} />
                     <span className="text-xs font-bold">{post.likes}</span>
                   </button>
                   <button

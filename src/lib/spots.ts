@@ -7,6 +7,8 @@ export interface SpotVersionRow {
   image_url: string | null;
   description?: string | null;
   created_at: string;
+  category?: string | null;
+  version_number?: number | null;
 }
 
 export interface SpotRow {
@@ -112,6 +114,7 @@ export async function createFeedPost(params: {
   latitude: number;
   longitude: number;
   userId: string;
+  category?: string;
 }) {
   const { error } = await supabase.from('posts').insert([
     {
@@ -124,6 +127,7 @@ export async function createFeedPost(params: {
       latitude: params.latitude,
       longitude: params.longitude,
       user_id: params.userId,
+      category: params.category || 'actualización',
       likes: 0,
       comments_count: 0,
       created_at: new Date().toISOString(),

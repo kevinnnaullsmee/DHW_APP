@@ -242,7 +242,7 @@ export default function MapPage() {
               setSelectedSpot(spot);
             }}
           >
-            <div className="cursor-pointer transform hover:scale-110 active:scale-95 transition-all">
+            <div className="marker-interactive">
               <div className="w-8 h-8 rounded-full bg-[var(--color-graffiti-red)] flex items-center justify-center shadow-[0_0_12px_var(--color-graffiti-red)] border-2 border-black">
                 <span className="text-white font-extrabold text-xs">{(spot.author || '?')[0].toUpperCase()}</span>
               </div>
